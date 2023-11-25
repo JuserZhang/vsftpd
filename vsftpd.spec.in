@@ -1,0 +1,53 @@
+%define debug_package %{nil}
+%define rpm_name 	vsftpd
+%define rpm_version 	%{RPM_VERSION}
+%define build_time	BUILD_TIME
+Name:		%rpm_name
+Version:	%rpm_version
+Release:	%{RPM_RELEASE}%{?dist}
+Epoch:      %{RPM_EPOCH}
+Summary:	Very Secure Ftp Daemon
+
+Group:		System Environment/Daemons
+License:	GPLv2 with exceptions
+URL:		http://www.sangfor.com.cn
+Source:     vsftpd.tar.bz2
+%description
+ %rpm_name with original version 3.0.5
+
+%prep
+%setup -n %{name}
+
+%build
+bash -x install_deps.sh
+bash -x do_make.sh
+
+%install
+mkdir -p $RPM_BUILD_ROOT%{_mandir}/man{5,8} 
+mkdir -p $RPM_BUILD_ROOT/var/
+install -p -D -m 755 vsftpd $RPM_BUILD_ROOT/usr/local/sbin/vsftpd
+install -p -D -m 644 vsftpd.pam $RPM_BUILD_ROOT/etc/pam.d/vsftpd.pam
+install -p -D -m 644 vsftpd.pem $RPM_BUILD_ROOT/etc/ssl/certs/vsftpd.pem
+mkdir -p $RPM_BUILD_ROOT/%{_mandir}/man5
+mkdir -p $RPM_BUILD_ROOT/%{_mandir}/man8
+install -m 644 vsftpd.conf.5 $RPM_BUILD_ROOT/%{_mandir}/man5/
+install -m 644 vsftpd.8 $RPM_BUILD_ROOT/%{_mandir}/man8/
+install -p -D -m 644 vsftp_conf/vuser_conf/ftp $RPM_BUILD_ROOT/etc/vsftpd/vuser_conf/ftp
+install -p -D -m 644 vsftp_conf/vuser_conf/root $RPM_BUILD_ROOT/etc/vsftpd/vuser_conf/root
+install -p -D -m 644 vsftp_conf/vsftpd.conf $RPM_BUILD_ROOT/etc/vsftpd/vsftpd.conf
+install -p -D -m 644 vsftp_conf/ftpusers $RPM_BUILD_ROOT/etc/vsftpd/ftpusers
+install -p -D -m 644 vsftp_conf/userlist $RPM_BUILD_ROOT/etc/vsftpd/userlist
+install -p -D -m 644 vsftpd.service $RPM_BUILD_ROOT/etc/systemd/system/vsftpd.service
+
+%files
+/usr/local/sbin/vsftpd
+/etc/pam.d/vsftpd.pam
+/etc/ssl/certs/vsftpd.pem
+%{_mandir}/man8/vsftpd.*
+%{_mandir}/man5/vsftpd.conf.*
+/etc/vsftpd/vuser_conf/ftp
+/etc/vsftpd/vuser_conf/root
+/etc/vsftpd/vsftpd.conf
+/etc/vsftpd/userlist
+/etc/vsftpd/ftpusers
+/etc/systemd/system/vsftpd.service

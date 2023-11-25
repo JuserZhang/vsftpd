@@ -1,0 +1,5 @@
+anon_root=/mnt/ftp/anno
+download_enable=yes
+anon_upload_enable=yes
+anon_mkdir_write_enable=yes
+anon_other_write_enable=yes

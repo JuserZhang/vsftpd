@@ -1,0 +1,1 @@
+/usr/local/sbin/vsftpd /etc/vsftpd/vsftpd.conf &
