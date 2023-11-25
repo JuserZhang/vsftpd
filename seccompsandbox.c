@@ -20,6 +20,7 @@
 #include <errno.h>
 
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 
 #include <sys/fcntl.h>
 #include <sys/mman.h>
@@ -43,6 +44,15 @@
 
 #ifndef __NR_openat
   #define __NR_openat 257
+#endif
+#ifndef __NR_newfstatat
+  #define __NR_newfstatat 262
+#endif
+#ifndef __NR_pselect6
+  #define __NR_pselect6 270
+#endif
+#ifndef __NR_getrandom
+  #define __NR_getrandom 318
 #endif
 
 #ifndef O_LARGEFILE
@@ -266,6 +276,7 @@ seccomp_sandbox_setup_data_connections()
                        3, IPPROTO_TCP);
   allow_nr(__NR_bind);
   allow_nr(__NR_select);
+  allow_nr(__NR_pselect6);
   if (tunable_port_enable)
   {
     allow_nr(__NR_connect);
@@ -300,6 +311,7 @@ seccomp_sandbox_setup_base()
   reject_nr(__NR_mremap, ENOSYS);
 
   /* Misc simple low-risk calls. */
+  allow_nr(__NR_gettimeofday); /* Used by logging. */
   allow_nr(__NR_rt_sigreturn); /* Used to handle SIGPIPE. */
   allow_nr(__NR_restart_syscall);
   allow_nr(__NR_close);
@@ -348,10 +360,17 @@ seccomp_sandbox_setup_prelogin(const struct vsf_session* p_sess)
     /* For file locking. */
     allow_nr_1_arg_match(__NR_fcntl, 2, F_SETLKW);
     allow_nr_1_arg_match(__NR_fcntl, 2, F_SETLK);
+    /* Newer kernel / glibc hit this. */
+    allow_nr(__NR_getrandom);
   }
   if (tunable_ssl_enable)
   {
     allow_nr_1_arg_match(__NR_recvmsg, 3, 0);
+    allow_nr_2_arg_match(__NR_setsockopt, 2, IPPROTO_TCP, 3, TCP_NODELAY);
+  }
+  if (tunable_syslog_enable)
+  {
+    reject_nr(__NR_socket, EACCES);
   }
 }
 
@@ -389,6 +408,7 @@ seccomp_sandbox_setup_postlogin(const struct vsf_session* p_sess)
   allow_nr_2_arg_match(__NR_setsockopt, 2, SOL_SOCKET, 3, SO_LINGER);
   allow_nr_2_arg_match(__NR_setsockopt, 2, IPPROTO_IP, 3, IP_TOS);
   allow_nr(__NR_fstat);
+  allow_nr(__NR_newfstatat);
   allow_nr(__NR_lseek);
   /* Since we use chroot() to restrict filesystem access, we can just blanket
    * allow open().
@@ -402,8 +422,10 @@ seccomp_sandbox_setup_postlogin(const struct vsf_session* p_sess)
   allow_nr(__NR_getcwd);
   allow_nr(__NR_chdir);
   allow_nr(__NR_getdents);
+  allow_nr(__NR_getdents64);
   /* Misc */
   allow_nr(__NR_umask);
+  reject_nr(__NR_sysinfo, EPERM);
 
   /* Config-dependent items follow. */
   if (tunable_use_sendfile)
@@ -439,6 +461,16 @@ seccomp_sandbox_setup_postlogin(const struct vsf_session* p_sess)
       /* Need to send file descriptors to privileged broker. */
       allow_nr_1_arg_match(__NR_sendmsg, 3, 0);
     }
+  }
+
+  if (tunable_syslog_enable)
+  {
+    /* The ability to pass an address spec isn't needed so disable it. We ensure
+     * the 6th arg (socklen) is 0. We could have checked the 5th arg (sockptr)
+     * but I don't know if 64-bit compares work in the kernel filter, so we're
+     * happy to check the socklen arg, which is 32 bits.
+     */
+    allow_nr_1_arg_match(__NR_sendto, 6, 0);
   }
 
   if (tunable_text_userdb_names)
@@ -667,6 +699,11 @@ seccomp_sandbox_lockdown()
   ret = prctl(PR_SET_SECCOMP, 2, &prog, 0, 0);
   if (ret != 0)
   {
+    if (errno == EINVAL)
+    {
+      /* Kernel isn't good enough. */
+      return;
+    }
     die("prctl PR_SET_SECCOMP failed");
   }
 }
